@@ -1,4 +1,4 @@
-# BreastG-FCL TCGA-BRCA Reproduction Instructions
+# BreastG-FCL
 
 Run every command from the repository root.
 
