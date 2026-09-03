@@ -1,132 +1,99 @@
-# BreastG-FCL
+# BreastG-FCL with NVIDIA FLARE
 
-Run every command from the repository root.
+This branch implements the BreastG-FCL research workflow with the
+[NVIDIA FLARE](https://github.com/NVIDIA/NVFlare) Collab API. The server calls
+published client methods like remote Python functions and uses their return
+values directly; FLARE handles task dispatch, transport, and result collection.
 
-## 1. Install the environment
+The current version uses deterministic, non-IID synthetic data so the complete
+federated continual-learning workflow can be run without access to controlled
+medical datasets. It is an initial research prototype intended to evolve into
+an example contribution to the NVIDIA FLARE repository.
 
-Using Conda:
+## What is implemented
 
-```bash
-conda env create -f environment.yml
-conda activate gfedcl
-```
+- A synchronous Collab API server/client workflow.
+- Multiple clients and sequential continual-learning tasks.
+- Spatial-temporal client relationship graph construction.
+- Global graph-discriminator training.
+- Local replay and weighted model aggregation.
+- Evaluation over the current and previous tasks.
+- Optional client-side Laplace perturbation of graph summaries and encodings.
 
-Or using pip:
+The federated control flow is defined in
+[`server.py`](research/breastg-fcl/server.py), while site-local operations are
+published from [`client.py`](research/breastg-fcl/client.py).
 
-```bash
-pip install -r requirements.txt
-```
-
-Install a CUDA-compatible PyTorch build separately when GPU execution is
-required.
-
-## 2. Prepare TCGA-BRCA expression data
-
-Download the GDC manifest, clinical metadata, and STAR-Counts files:
-
-```bash
-python TCGA-BRCA/scripts/download_tcga_brca.py
-```
-
-To inspect the manifest before downloading the expression files:
-
-```bash
-python TCGA-BRCA/scripts/download_tcga_brca.py --metadata-only
-```
-
-The training workflow expects:
+## Project layout
 
 ```text
-TCGA-BRCA/metadata/gdc_files_manifest.tsv
-TCGA-BRCA/metadata/gdc_clinical_cases.tsv
-TCGA-BRCA/data/raw/<file_id>/*.rna_seq.augmented_star_gene_counts.tsv
+research/breastg-fcl/
+├── job.py                 # CollabRecipe and simulator entry point
+├── server.py              # @collab.main federated workflow
+├── client.py              # Site-local @collab.publish methods
+├── aggregation.py         # Result validation and aggregation
+├── graph.py               # Spatial-temporal relationship graph
+├── model.py               # PyTorch model and discriminator
+├── data.py                # Synthetic continual-learning data
+├── config.py              # Experiment configuration
+├── tests/                 # Focused unit tests
+└── requirements.txt
 ```
 
-Interrupted downloads can be resumed by running the same command again.
+See the [research example README](research/breastg-fcl/README.md) for the
+workflow design, privacy notes, and current limitations.
 
-## 3. Prepare TCIA graph features
+## Install
 
-Download and checksum the official TCGA-Breast-Radiogenomics artifacts, then
-build the spatial and temporal patient tables:
+Run all commands from the repository root:
 
 ```bash
-python TCGA-BRCA/scripts/download_tcia_official_radiogenomics.py
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r research/breastg-fcl/requirements.txt
 ```
 
-The graph workflow expects:
+The prototype requires Python, PyTorch, and `nvflare>=2.9.0rc3,<3.0`. Install a
+CUDA-compatible PyTorch build separately if GPU execution is required.
+
+## Run a smoke experiment
+
+```bash
+python research/breastg-fcl/job.py \
+  --num-clients 2 \
+  --num-tasks 2 \
+  --rounds-per-task 1 \
+  --local-epochs 1
+```
+
+By default, the simulator writes its workspace and generated FLARE job under:
 
 ```text
-TCGA-BRCA/data/tcia_official_radiogenomics/official_spatial_patient_features.csv
-TCGA-BRCA/data/tcia_official_radiogenomics/official_temporal_patient_features.csv
-TCGA-BRCA/data/tcia_official_radiogenomics/official_source_manifest.json
+/tmp/nvflare/simulation/breastg_fcl_collab/
 ```
 
-Verify the public source artifacts:
+Use `python research/breastg-fcl/job.py --help` to see all experiment options.
+For example, GPU mappings can be supplied with `--gpu "[0],[1]"`.
+
+## Run tests
 
 ```bash
-python TCGA-BRCA/scripts/audit_healthcom26_reproduction.py
+PYTHONPATH=research/breastg-fcl \
+  python -m unittest discover -s research/breastg-fcl/tests -v
 ```
 
-## 4. Run the reproduction experiment
+The tests cover graph normalization and temporal history, weighted aggregation,
+failure handling, deterministic site data, and model tensor shapes.
 
-Run the default TCGA-BRCA reproduction experiment:
+## Current scope
 
-```bash
-python TCGA-BRCA/main.py \
-  --seed 42 \
-  --output-dir TCGA-BRCA/dump/breastgfcl_seed42
-```
+This version does not include a TCGA/TCIA data adapter, production provisioning,
+automatic checkpoint recovery, experiment figures, or an exact reproduction of
+the paper. Real clinical data must remain site-local and can be integrated later
+through a data-provider adapter without changing the Collab API control flow.
 
-The default configuration uses 10 clients, 3 continual tasks, 10 communication
-rounds, 20 local epochs, a temporal window of 2 tasks, and differential
-privacy. Configuration defaults are defined in
-`TCGA-BRCA/configs/TCGA_BRCA.py`.
+## License
 
-For a CPU connectivity test before the full run:
-
-```bash
-python TCGA-BRCA/main.py \
-  --device cpu \
-  --max-genes 16 \
-  --num-local-epochs 1 \
-  --num-rounds 1 \
-  --gat-epochs 1 \
-  --output-dir TCGA-BRCA/dump/smoke_test
-```
-
-The smoke-test metrics are not paper-comparable results.
-
-## 5. Validate the implementation
-
-```bash
-python -m compileall -q TCGA-BRCA
-python -m unittest discover -s TCGA-BRCA/tests -v
-```
-
-The regression tests validate row-normalized attention, the temporal sliding
-window, multiplicative spatial-temporal fusion, and strict input validation.
-
-## 6. Inspect outputs
-
-Each output directory contains:
-
-```text
-run.log
-round_accuracy.csv
-all_tasks_accuracy.csv
-plots/
-relational_graphs/task_<k>_spatial.npy
-relational_graphs/task_<k>_temporal.npy
-relational_graphs/task_<k>_temporal_window.npy
-relational_graphs/task_<k>_fused.npy
-```
-
-Check exact-author reproducibility separately:
-
-```bash
-python TCGA-BRCA/scripts/audit_healthcom26_reproduction.py --require-exact
-```
-
-This command intentionally returns exit status 2 while unpublished attention
-architectures, four-region preprocessing, cohort mapping, and experimental
-partition details remain unresolved.
+The project is licensed under the [Apache License 2.0](LICENSE). Medical
+datasets, pretrained models, and third-party assets are not redistributed.
