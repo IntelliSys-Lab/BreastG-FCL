@@ -1,9 +1,7 @@
-from model.models import *
 import torch
-import copy
-from typing import List, Dict
-import numpy as np
-import os
+
+from model.models import Client, add_laplace_noise, flat, to_np, to_tensor, write_pickle
+from utils.server_utils import average_weights
 
 def create_clients(opt):
     """
@@ -13,18 +11,12 @@ def create_clients(opt):
     for i in range(opt.num_clients):
         client = Client(i, opt)
         clients.append(client)
-    
+
+    if clients:
+        initial_weights = clients[0].get_weights()
+        for client in clients[1:]:
+            client.set_weights(initial_weights)
     return clients
-
-def average_weights(weights: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
-    weights_avg = copy.deepcopy(weights[0])
-
-    for key in weights_avg.keys():
-        for i in range(1, len(weights)):
-            weights_avg[key] += weights[i][key]
-        weights_avg[key] = torch.div(weights_avg[key], 2*len(weights))
-
-    return weights_avg
 
 def concatenate_tensors(tensor_list):
     """

@@ -9,10 +9,6 @@ import seaborn as sns
 from collections import defaultdict
 import copy
 import csv
-import ray
-
-# Initialize Ray - ignore reinit error in case Ray is already running
-ray.init(ignore_reinit_error=True)
 
 from model.modules import BreastGraphGenerator
 # from utils.dp_ks_analysis import DifferentialPrivacyAnalyzer
@@ -80,83 +76,22 @@ def add_laplace_noise_to_graph(relational_graph, scale, normalize=True):
     
     return noisy_graph.astype(np.float32)
 
-@ray.remote
-def generate_encodings_remote(client, task, relational_graphs, dataloader, generate_synthetic=False):
-    """
-    Generate encodings from a client in parallel
-    """
-    logger.info(f"Generating encodings from client {client.getId()} for task {task}")
-    
-    # Convert relational graphs to float32 if they're numpy arrays
-    if isinstance(relational_graphs, list):
-        for i in range(len(relational_graphs)):
-            if isinstance(relational_graphs[i], np.ndarray):
-                relational_graphs[i] = relational_graphs[i].astype(np.float32)
-                
-    result = client.generate_encodings(task, relational_graphs, dataloader, generate_synthetic)
-    return result
+from utils.model_utils import create_clients as create_modified_clients
 
-@ray.remote
-def train_client_remote(client, task, relational_graphs, dataloader, epochs, generate_synthetic=False):
-    """
-    Train a client in parallel
-    
-    Args:
-        client: Client object
-        task: Task ID
-        relational_graphs: Relational graphs for all tasks
-        dataloader: DataLoader for the client
-        epochs: Number of epochs to train
-        generate_synthetic: Whether to use synthetic samples
-        
-    Returns:
-        dict: Client weights after training
-    """
-    logger.info(f"Training client {client.getId()} for task {task}")
-    for epoch in range(epochs):
-        result = client.learn(epoch, task, relational_graphs, dataloader, generate_synthetic)
-    
-    # Return client weights
-    return client.get_weights()
-
-@ray.remote
-def test_client_remote(client, task, dataloader, relational_graphs):
-    """
-    Test a client in parallel
-    
-    Args:
-        client: Client object
-        task: Task ID  
-        dataloader: DataLoader for testing
-        relational_graphs: Task-indexed relational graphs
-        
-    Returns:
-        dict: Test metrics
-    """
-    logger.info(f"Testing client {client.getId()} for task {task}")
-    metrics = client.test(task, dataloader, relational_graphs)
-    return metrics
-
-def create_modified_clients(opt):
-    """
-    Create modified clients based on the given options
-    
-    Args:
-        opt: Configuration options
-        
-    Returns:
-        list: List of client objects
-    """
-    clients = []
-    for i in range(opt.num_clients):
-        client = ModifiedClient(i, opt)
-        clients.append(client)
-    
-    return clients
 
 class ParallelServerGFedCL:
-    def __init__(self, opt):
+    def __init__(self, opt, transport=None, dataloaders=None):
         self.opt = opt
+        if transport is None:
+            from federated.ray_transport import RayTransport
+            transport = RayTransport(opt)
+        self.transport = transport
+        # The transport must not affect initialization or graph/privacy RNG.
+        random.seed(opt.seed)
+        np.random.seed(opt.seed)
+        torch.manual_seed(opt.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(opt.seed)
         # Handle device safely
         if torch.cuda.is_available() and opt.device == 'cuda':
             self.device = torch.device('cuda')
@@ -173,14 +108,19 @@ class ParallelServerGFedCL:
         logger.info("Initializing server with global discriminator...")
         self.server = Server(opt)
         
-        logger.info("Initializing BreastG-FCL disease-aware graph generator...")
-        self.dygat = BreastGraphGenerator(opt).to(self.device)
-
         # Load and partition TCGA-BRCA dataset
         logger.info("Setting up TCGA-BRCA dataloaders...")
         from utils.dataset_utils import setup_tcga_brca_loaders
-        self.dataloaders = setup_tcga_brca_loaders(opt)
+        self.dataloaders = setup_tcga_brca_loaders(opt) if dataloaders is None else dataloaders
         logger.info("TCGA-BRCA dataloaders prepared successfully")
+
+        # Summary widths come from the loaded TCIA tables, not the latent width.
+        logger.info("Initializing BreastG-FCL neural spatial/temporal attention...")
+        self.dygat = BreastGraphGenerator(opt).to(self.device)
+        logger.info(
+            "Attention uses seeded network parameters without separate training: %s",
+            self.dygat.network_config(),
+        )
         
         # Create modified clients
         logger.info("Creating modified clients...")
@@ -201,6 +141,19 @@ class ParallelServerGFedCL:
         # Initialize quality evaluator (FID/IS) if enabled
         # self.quality_evaluator = QualityEvaluator(opt)
         
+    @classmethod
+    def from_components(cls, opt, server, graph_generator, clients, dataloaders, transport):
+        """Run the same workflow with prepared state and a different transport."""
+        instance = cls.__new__(cls)
+        instance.opt = opt
+        instance.device = torch.device(opt.device)
+        instance.server = server
+        instance.dygat = graph_generator
+        instance.clients = clients
+        instance.dataloaders = dataloaders
+        instance.transport = transport
+        return instance
+
     def _generate_relational_graph(self, task):
         """Generate and persist the complete BreastG-FCL task graph."""
         logger.info(
@@ -246,6 +199,16 @@ class ParallelServerGFedCL:
                 values,
             )
 
+        torch.save(
+            {
+                "task_id": task,
+                "network_config": self.dygat.network_config(),
+                "state_dict": self.dygat.state_dict(),
+                "attention_training": "none",
+            },
+            os.path.join(graph_dir, f"task_{task + 1}_attention.pt"),
+        )
+
         logger.info(
             "Adding Laplace noise to relational graph with scale %s",
             self.opt.b,
@@ -285,10 +248,15 @@ class ParallelServerGFedCL:
                 torch.cuda.empty_cache()
             
             relational_graphs[task] = self._generate_relational_graph(task)
+
+            # Persist only label counts/batch sizes for later synthetic replay.
+            for client_id, client in enumerate(self.clients):
+                client.register_task(task, self.dataloaders[client_id][task]['train'])
     
             # Main training loop with the server and modified clients
             for r in range(self.opt.num_rounds):
                 logger.info(f'Round {r+1}/{self.opt.num_rounds}')
+                self.transport.set_round(task, r)
 
                 # Start tracking this round
                 # self.comm_tracker.start_round(task, r)
@@ -311,49 +279,23 @@ class ParallelServerGFedCL:
                 # Collect encodings from each client without training (batched)
                 encoding_results = []
 
-                # Launch encoding generation for current task
+                # Each worker uploads current real latents plus G-produced
+                # latents for the current task and all enabled replay tasks.
                 for i in range(0, len(self.clients), self.opt.ray_max_in_flight):
                     batch_clients = self.clients[i : i + self.opt.ray_max_in_flight]
                     futures = []
                     for j, client in enumerate(batch_clients):
                         client_id = i + j
                         futures.append(
-                            generate_encodings_remote.options(
-                                num_gpus=self.opt.ray_num_gpus_per_task,
-                                num_cpus=self.opt.ray_num_cpus_per_task,
-                            ).remote(
+                            self.transport.generate_encodings(
                                 client,
                                 task,
                                 relational_graphs,
                                 self.dataloaders[client_id][task]['train'],
-                                False,
                             )
                         )
-                    encoding_results.extend(ray.get(futures))
+                    encoding_results.extend(self.transport.gather(futures))
 
-                # Launch encoding generation for previous task if applicable
-                if self.opt.replay:
-                    logger.info(f'Using replay for previous task {task-1} encodings')
-                    if task >= 1:
-                        for i in range(0, len(self.clients), self.opt.ray_max_in_flight):
-                            batch_clients = self.clients[i : i + self.opt.ray_max_in_flight]
-                            futures = []
-                            for j, client in enumerate(batch_clients):
-                                client_id = i + j
-                                futures.append(
-                                    generate_encodings_remote.options(
-                                        num_gpus=self.opt.ray_num_gpus_per_task,
-                                        num_cpus=self.opt.ray_num_cpus_per_task,
-                                    ).remote(
-                                        client,
-                                        task - 1,
-                                        relational_graphs,
-                                        self.dataloaders[client_id][task - 1]['train'],
-                                        True,
-                                    )
-                                )
-                            encoding_results.extend(ray.get(futures))
-                
                 # Process results
                 for result in encoding_results:
                     all_encodings.extend(result['encodings'])
@@ -398,57 +340,33 @@ class ParallelServerGFedCL:
                 logger.info(f'Waiting for client training to complete...')
                 training_results = []
 
-                # Launch client training for current task
+                # Current and synthetic replay losses update the same E/F/G
+                # worker copy, so all resulting updates reach aggregation.
                 for i in range(0, len(self.clients), self.opt.ray_max_in_flight):
                     batch_clients = self.clients[i : i + self.opt.ray_max_in_flight]
                     futures = []
                     for j, client in enumerate(batch_clients):
                         client_id = i + j
                         futures.append(
-                            train_client_remote.options(
-                                num_gpus=self.opt.ray_num_gpus_per_task,
-                                num_cpus=self.opt.ray_num_cpus_per_task,
-                            ).remote(
+                            self.transport.train_client(
                                 client,
                                 task,
                                 relational_graphs,
                                 self.dataloaders[client_id][task]['train'],
                                 self.opt.num_local_epochs,
-                                False,
                             )
                         )
-                    training_results.extend(ray.get(futures))
+                    training_results.extend(self.transport.gather(futures))
 
-                if self.opt.replay:
-                    logger.info(f'Using replay for previous task {task-1} training')
-                    if task >= 1:
-                        for i in range(0, len(self.clients), self.opt.ray_max_in_flight):
-                            batch_clients = self.clients[i : i + self.opt.ray_max_in_flight]
-                            futures = []
-                            for j, client in enumerate(batch_clients):
-                                client_id = i + j
-                                futures.append(
-                                    train_client_remote.options(
-                                        num_gpus=self.opt.ray_num_gpus_per_task,
-                                        num_cpus=self.opt.ray_num_cpus_per_task,
-                                    ).remote(
-                                        client,
-                                        task - 1,
-                                        relational_graphs,
-                                        self.dataloaders[client_id][task - 1]['train'],
-                                        self.opt.num_local_epochs,
-                                        True,
-                                    )
-                                )
-                            ray.get(futures)
-                
                 # Process results and extract weights
                 encoder_weights = []
                 predictor_weights = []
+                generator_weights = []
                 
                 for result in training_results:
                     encoder_weights.append(result['encoder'])
                     predictor_weights.append(result['predictor'])
+                    generator_weights.append(result['generator'])
                     # self.comm_tracker.add_model_weights_communication(
                     #     result['encoder'],
                     #     direction='upload',
@@ -467,13 +385,16 @@ class ParallelServerGFedCL:
                 from utils.server_utils import average_weights
                 global_encoder = average_weights(encoder_weights)
                 global_predictor = average_weights(predictor_weights)
+                global_generator = average_weights(generator_weights)
 
                 # Update the local models with the averaged weights
-                for client in self.clients:
+                for client, result in zip(self.clients, training_results):
                     client.set_weights({
                         'encoder': global_encoder,
-                        'predictor': global_predictor
+                        'predictor': global_predictor,
+                        'generator': global_generator,
                     })
+                    client.set_training_state(result['training_state'])
                     # self.comm_tracker.add_model_weights_communication(
                     #     global_encoder,
                     #     direction='download',
@@ -497,17 +418,14 @@ class ParallelServerGFedCL:
                     for j, client in enumerate(batch_clients):
                         client_id = i + j
                         futures.append(
-                            test_client_remote.options(
-                                num_gpus=self.opt.ray_num_gpus_per_task,
-                                num_cpus=self.opt.ray_num_cpus_per_task,
-                            ).remote(
+                            self.transport.test_client(
                                 client,
                                 task,
                                 self.dataloaders[client_id][task]['test'],
                                 relational_graphs,
                             )
                         )
-                    test_results.extend(ray.get(futures))
+                    test_results.extend(self.transport.gather(futures))
                 task_accuracies = [result["acc"] for result in test_results]
                 
                 # Calculate average accuracy across all clients for this round
@@ -541,10 +459,7 @@ class ParallelServerGFedCL:
                                 client_id = i + j
                                 if prev_task in self.dataloaders[client_id]:
                                     futures.append(
-                                        test_client_remote.options(
-                                            num_gpus=self.opt.ray_num_gpus_per_task,
-                                            num_cpus=self.opt.ray_num_cpus_per_task,
-                                        ).remote(
+                                        self.transport.test_client(
                                             client,
                                             prev_task,
                                             self.dataloaders[client_id][prev_task]['test'],
@@ -553,7 +468,7 @@ class ParallelServerGFedCL:
                                     )
 
                             if futures:
-                                prev_task_results.extend(ray.get(futures))
+                                prev_task_results.extend(self.transport.gather(futures))
                         
                         # Collect test results for previous task
                         if prev_task_results:

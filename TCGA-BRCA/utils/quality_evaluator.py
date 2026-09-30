@@ -17,6 +17,10 @@ logger = logging.getLogger("GFedCL")
 
 @ray.remote
 def generate_fid_data_remote(client, task_id, relational_graphs, dataloader, max_batches, generate_synthetic):
+    if generate_synthetic:
+        raise NotImplementedError(
+            "G generates latent features; raw/image synthesis for FID is unavailable"
+        )
     logger.info(f"Generating FID data from client {client.getId()} for task {task_id}")
 
     client.task_ID = task_id
@@ -25,8 +29,6 @@ def generate_fid_data_remote(client, task_id, relational_graphs, dataloader, max
 
     real_images = []
     real_labels = []
-    synthetic_images = []
-    synthetic_labels = []
 
     with torch.no_grad():
         for batch_idx, batch in enumerate(dataloader):
@@ -40,28 +42,15 @@ def generate_fid_data_remote(client, task_id, relational_graphs, dataloader, max
             real_images.append(inputs.cpu())
             real_labels.append(targets.cpu())
 
-            if generate_synthetic and task_id > 0:
-                synthetic_images.append(torch.randn_like(inputs).cpu())
-                synthetic_labels.append(targets.cpu())
-
     if not real_images:
         logger.warning(f"No real images collected for client {client.getId()}")
-        return {"real_data": None, "synthetic_data": None}
-
-    if generate_synthetic and not synthetic_images:
-        logger.warning(f"No synthetic images generated for client {client.getId()}")
         return {"real_data": None, "synthetic_data": None}
 
     real_data = {
         "images": torch.cat(real_images, dim=0),
         "labels": torch.cat(real_labels, dim=0),
     }
-    synthetic_data = {
-        "images": torch.cat(synthetic_images, dim=0),
-        "labels": torch.cat(synthetic_labels, dim=0),
-    }
-
-    return {"real_data": real_data, "synthetic_data": synthetic_data}
+    return {"real_data": real_data, "synthetic_data": None}
 
 
 @ray.remote

@@ -40,7 +40,10 @@ class FixedLatentSpaceEvaluator:
                 return False
         return True
 
-    def visualize_latent_space(self, clients, dataloaders, task_id, num_samples=500, method="tsne"):
+    def visualize_latent_space(self, clients, dataloaders, task_id, num_samples=500,
+                               method="tsne", relational_graphs=None):
+        if relational_graphs is None:
+            raise ValueError("Latent visualization requires the task-indexed relational graphs")
         logger.info(f"Visualizing latent space for task {task_id} using {method}")
 
         real_encodings = []
@@ -52,41 +55,27 @@ class FixedLatentSpaceEvaluator:
         with torch.no_grad():
             for client_id, client in enumerate(clients):
                 try:
+                    client.eval()
                     dataloader = dataloaders[client_id][task_id]["train"]
                     for data, labels in dataloader:
                         data = data.to(self.device)
                         labels = labels.to(self.device)
 
-                        if hasattr(client, "client_relations"):
-                            graph_embedding = client.client_relations
-                        else:
-                            one_hot = torch.zeros(1, self.opt.num_clients, device=self.device)
-                            one_hot[0, client_id] = 1.0
-                            graph_embedding = one_hot
-
-                        z_seq = client.netG(graph_embedding)
-                        e_seq = client.netE(data, labels, z_seq)
+                        graph_row = client._graph_row(relational_graphs, task_id, len(labels))
+                        e_seq = client.netE(data, graph_row)
 
                         real_encodings.append(e_seq.cpu().numpy())
                         real_labels.extend(labels.cpu().numpy())
                         client_ids.extend([client_id] * len(labels))
 
+                        noise = torch.randn(len(labels), client.netG.noise_dim, device=client.device)
+                        synthetic = client.netG(noise, labels, graph_row)
+                        synthetic_encodings.append(synthetic.cpu().numpy())
+                        synthetic_labels.extend(labels.cpu().numpy())
+
                         if len(real_labels) >= num_samples:
                             break
 
-                    if task_id > 0:
-                        noise = torch.randn(
-                            min(dataloader.batch_size, num_samples // self.opt.num_clients),
-                            self.opt.input_dim,
-                            device=self.device,
-                        )
-                        syn_labels = labels[
-                            : min(dataloader.batch_size, num_samples // self.opt.num_clients)
-                        ]
-                        z_seq = client.netG(graph_embedding)
-                        e_seq = client.netE(noise, syn_labels, z_seq)
-                        synthetic_encodings.append(e_seq.cpu().numpy())
-                        synthetic_labels.extend(syn_labels.cpu().numpy())
                 except Exception as exc:
                     logger.error(f"Error processing client {client_id}: {exc}")
 
@@ -229,9 +218,12 @@ class FixedLatentSpaceEvaluator:
 
     @ray.remote
     def collect_client_samples(self, client, dataloader, task_id, generate_synthetic, num_samples):
+        if generate_synthetic:
+            raise NotImplementedError(
+                "G generates latent features; raw/image synthesis for inception score is unavailable"
+            )
         client.eval()
         real_features = []
-        synthetic_features = []
 
         with torch.no_grad():
             for data, labels in dataloader:
@@ -243,42 +235,10 @@ class FixedLatentSpaceEvaluator:
 
             real_features = torch.cat(real_features, dim=0)[:num_samples]
 
-            if generate_synthetic and task_id > 0:
-                batch_size = min(dataloader.batch_size, num_samples)
-                generated = 0
-                for i in range((num_samples + batch_size - 1) // batch_size):
-                    for data, labels in dataloader:
-                        batch_labels = labels[
-                            : min(batch_size, num_samples - i * batch_size)
-                        ].to(self.device)
-                        break
-                    current_batch = batch_labels.size(0)
-                    noise = torch.randn(
-                        current_batch,
-                        self.opt.input_dim,
-                        device=self.device,
-                    )
-
-                    if hasattr(client, "client_relations"):
-                        graph_embedding = client.client_relations
-                    else:
-                        one_hot = torch.zeros(1, self.opt.num_clients, device=self.device)
-                        one_hot[0, client.client_id] = 1.0
-                        graph_embedding = one_hot
-
-                    z_seq = client.netG(graph_embedding)
-                    client.netE(noise, batch_labels, z_seq)
-                    synthetic_features.append(noise)
-                    generated += current_batch
-                    if generated >= num_samples:
-                        break
-
-                synthetic_features = torch.cat(synthetic_features, dim=0)[:num_samples]
-
         return {
             "client_id": client.client_id,
             "real_features": real_features,
-            "synthetic_features": synthetic_features if generate_synthetic and task_id > 0 else None,
+            "synthetic_features": None,
         }
 
     def evaluate_inception_scores(

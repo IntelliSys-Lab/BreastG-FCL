@@ -85,6 +85,7 @@ def build_parser():
     parser.add_argument("--lr-d", type=float, default=1e-4)
     parser.add_argument("--lr-f", type=float, default=1e-4)
     parser.add_argument("--lr-e", type=float, default=1e-4)
+    parser.add_argument("--lr-g", type=float, default=1e-4)
     parser.add_argument("--gamma", type=float, default=1000)
     parser.add_argument("--beta1", type=float, default=0.9)
     parser.add_argument("--beta2", type=float, default=0.999)
@@ -92,8 +93,18 @@ def build_parser():
     parser.add_argument("--shuffle", type=_str2bool, default=True)
 
     parser.add_argument("--gat-rounds", type=int, default=10)
-    parser.add_argument("--gat-epochs", type=int, default=20)
-    parser.add_argument("--gat-lr", type=float, default=1e-5)
+    parser.add_argument(
+        "--gat-epochs", type=int, default=20,
+        help="Compatibility option; attention currently runs inference without separate training.",
+    )
+    parser.add_argument(
+        "--gat-lr", type=float, default=1e-5,
+        help="Reserved for attention training; no separate attention optimizer is configured.",
+    )
+    parser.add_argument("--gat-hidden-dim", type=int, default=128)
+    parser.add_argument("--gat-embedding-dim", type=int, default=64)
+    parser.add_argument("--gat-heads", type=int, default=4)
+    parser.add_argument("--gat-dropout", type=float, default=0.2)
     parser.add_argument("--temporal-window", type=int, default=2)
     parser.add_argument("--attention-temperature", type=float, default=1.0)
     parser.add_argument("--graph-epsilon", type=float, default=1e-8)
@@ -102,16 +113,24 @@ def build_parser():
     parser.add_argument("--class-per-task", type=int, default=2)
     parser.add_argument("--num-local-epochs", type=int, default=20)
     parser.add_argument("--num-rounds", type=int, default=10)
-    parser.add_argument("--num-clients", type=int, default=10)
+    parser.add_argument("--num-clients", type=int, default=4)
 
     parser.add_argument("--use-visdom", type=_str2bool, default=False)
     parser.add_argument("--outf", default=DEFAULT_LOAD_DIR)
 
-    parser.add_argument("--nt", type=int, default=10)
-    parser.add_argument("--nh", type=int, default=256)
-    parser.add_argument("--ni", type=int, default=256)
+    parser.add_argument(
+        "--nt", type=int, default=None,
+        help="Compatibility option; graph embedding dimension is set by --num-clients.",
+    )
+    parser.add_argument("--nh", type=int, default=800)
+    parser.add_argument("--noise-dim", type=int, default=100,
+                        help="Noise width for the graph-conditioned latent replay generator.")
+    parser.add_argument("--ni", type=int, default=800)
     parser.add_argument("--nc", type=int, default=2)
-    parser.add_argument("--nd-out", type=int, default=10)
+    parser.add_argument(
+        "--nd-out", type=int, default=None,
+        help="Compatibility option; discriminator output dimension is set by --num-clients.",
+    )
     parser.add_argument("--p", type=float, default=0.2)
     parser.add_argument("--no-bn", type=_str2bool, default=True)
 
@@ -128,7 +147,7 @@ def build_parser():
     parser.add_argument("--ray-num-cpus-per-task", type=float, default=1.0)
     parser.add_argument("--ray-max-in-flight", type=int, default=None)
 
-    parser.add_argument("--replay", type=_str2bool, default=False)
+    parser.add_argument("--replay", type=_str2bool, default=True)
 
     return parser
 
@@ -156,6 +175,8 @@ def finalize_opt(opt):
     opt.b = opt.sensitivity / opt.epsilon if opt.epsilon != 0 else 0.0
     opt.nc = opt.num_classes
     opt.ni = opt.nh
+    opt.nt = opt.num_clients
+    opt.nd_out = opt.nt
 
     opt.ray_available_gpus = _available_gpu_count()
 
