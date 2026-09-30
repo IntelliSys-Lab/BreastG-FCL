@@ -16,6 +16,7 @@ dependencies:
   - pytorch>=2.0
   - torchvision>=0.15
   - pip:
+      - nvflare==2.7.1
       - ray[default]>=2.6
       - easydict>=1.10
       - openpyxl==3.1.5

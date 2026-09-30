@@ -4,7 +4,8 @@
 torch>=2.0
 torchvision>=0.15
 
-# Parallel execution
+# Federated execution (NVFlare is the default; Ray is the parity reference)
+nvflare==2.7.1
 ray[default]>=2.6
 
 # Numerical computing and plotting
