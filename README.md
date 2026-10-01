@@ -1,7 +1,10 @@
 # BreastG-FCL: Graph-Conditioned Federated Continual Learning for Breast Cancer Radiogenomics
 
-Qingyang Yu, Jingyi Wang, Xinyue Zhang, Miao Pan, Ziyue Xu, and Hao Wang.
-Accepted at IEEE HealthCom 2026; see the announcement below.
+This repository contains the research implementation for our IEEE HealthCom 2026 paper:<br>
+**BreastG-FCL: Graph-Conditioned Federated Continual Learning for Breast Cancer Radiogenomics**<br>
+Qingyang Yu, Jingyi Wang, Xinyue Zhang, Miao Pan, Ziyue Xu, Hao Wang<br>
+*Accepted at IEEE HealthCom, 2026.*<br>
+[[Announcement]](https://intellisys.haow.us/news/) [[Ray Code]](https://github.com/IntelliSys-Lab/BreastG-FCL/tree/main) [[NVFlare Code]](https://github.com/IntelliSys-Lab/BreastG-FCL/tree/nvflare)
 
 ## Abstract
 
