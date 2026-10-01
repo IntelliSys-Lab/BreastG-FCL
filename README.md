@@ -3,7 +3,7 @@
 This repository contains the research implementation for our IEEE HealthCom 2026 paper:<br>
 **BreastG-FCL: Graph-Conditioned Federated Continual Learning for Breast Cancer Radiogenomics**<br>
 Qingyang Yu, Jingyi Wang, Xinyue Zhang, Miao Pan, Ziyue Xu, Hao Wang<br>
-*Accepted at IEEE HealthCom, 2026.*
+*In Proceedings of IEEE HealthCom, 2026.*
 
 ## Abstract
 
