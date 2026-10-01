@@ -17,15 +17,7 @@ NVFlare execution and comparison with the Ray reference backend.
 
 ## Papers and Links
 
-[[Announcement]](https://intellisys.haow.us/news/) [[Ray Code]](https://github.com/IntelliSys-Lab/BreastG-FCL/tree/main) [[NVFlare Code]](https://github.com/IntelliSys-Lab/BreastG-FCL/tree/nvflare)
-
-The BreastG-FCL title and citation follow the supplied camera-ready
-manuscript. The announcement is not a paper download, and a public
-paper/preprint URL has not been verified.
-
-- GFedCL: [paper](https://ryougish1k1.github.io/assets/pdf/gfedcl.pdf) and
-  [upstream implementation](https://github.com/IntelliSys-Lab/GFedCL), the
-  reference for the component roles and spatial attention structure.
+- BreastG-FCL: [paper](https://ryougish1k1.github.io/assets/pdf/qiangyang2026healthcom.pdf).
 - [NVIDIA FLARE](https://github.com/NVIDIA/NVFlare).
 
 ## Objective
