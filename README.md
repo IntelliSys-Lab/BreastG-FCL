@@ -422,16 +422,9 @@ are not an exact lockfile for this environment. Spreadsheet readers
 
 ```bibtex
 @inproceedings{yu2026breastgfcl,
-  title     = {{BreastG-FCL}: Graph-Conditioned Federated Continual Learning for Breast Cancer Radiogenomics},
   author    = {Yu, Qingyang and Wang, Jingyi and Zhang, Xinyue and Pan, Miao and Xu, Ziyue and Wang, Hao},
-  booktitle = {IEEE HealthCom},
-  year      = {2026}
-}
-
-@inproceedings{yu2026gfedcl,
-  title     = {{GFedCL}: Graph-Based Federated Continual Learning with Spatial and Temporal Awareness},
-  author    = {Yu, Qingyang and Hua, Yang and Zhang, Qizhen and Wang, Hao},
-  booktitle = {Proceedings of the 43rd International Conference on Machine Learning},
+  title     = {{BreastG-FCL}: Graph-Conditioned Federated Continual Learning for Breast Cancer Radiogenomics},
+  booktitle = {2026 IEEE International Conference on E-health Networking, Application \& Services (HealthCom)},
   year      = {2026}
 }
 ```
