@@ -3,8 +3,7 @@
 This repository contains the research implementation for our IEEE HealthCom 2026 paper:<br>
 **BreastG-FCL: Graph-Conditioned Federated Continual Learning for Breast Cancer Radiogenomics**<br>
 Qingyang Yu, Jingyi Wang, Xinyue Zhang, Miao Pan, Ziyue Xu, Hao Wang<br>
-*Accepted at IEEE HealthCom, 2026.*<br>
-[[Announcement]](https://intellisys.haow.us/news/) [[Ray Code]](https://github.com/IntelliSys-Lab/BreastG-FCL/tree/main) [[NVFlare Code]](https://github.com/IntelliSys-Lab/BreastG-FCL/tree/nvflare)
+*Accepted at IEEE HealthCom, 2026.*
 
 ## Abstract
 
@@ -18,12 +17,12 @@ NVFlare execution and comparison with the Ray reference backend.
 
 ## Papers and Links
 
-- BreastG-FCL: [HealthCom 2026 acceptance announcement](https://intellisys.haow.us/news/).
-  The title and citation follow the supplied camera-ready manuscript; the
-  announcement is not a paper download, and a public paper/preprint URL has
-  not been verified.
-- [BreastG-FCL project and NVFlare implementation](https://github.com/IntelliSys-Lab/BreastG-FCL/tree/nvflare).
-- [BreastG-FCL Ray reference implementation](https://github.com/IntelliSys-Lab/BreastG-FCL/tree/main).
+[[Announcement]](https://intellisys.haow.us/news/) [[Ray Code]](https://github.com/IntelliSys-Lab/BreastG-FCL/tree/main) [[NVFlare Code]](https://github.com/IntelliSys-Lab/BreastG-FCL/tree/nvflare)
+
+The BreastG-FCL title and citation follow the supplied camera-ready
+manuscript. The announcement is not a paper download, and a public
+paper/preprint URL has not been verified.
+
 - GFedCL: [paper](https://ryougish1k1.github.io/assets/pdf/gfedcl.pdf) and
   [upstream implementation](https://github.com/IntelliSys-Lab/GFedCL), the
   reference for the component roles and spatial attention structure.
