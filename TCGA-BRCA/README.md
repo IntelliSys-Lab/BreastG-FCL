@@ -163,15 +163,18 @@ advance server randomness. Importing the coordinator does not start Ray.
 
 ## Run and verify
 
-Run all commands from the repository root. Prepare real data with the
-existing scripts before launching a real-data job:
+Run all commands from the repository root. Follow the root README's
+[data preparation](../README.md#data-preparation) first, including resetting
+the checked-in download ledger on a fresh clone without raw data. Then run:
 
 ```bash
-python TCGA-BRCA/scripts/download_tcga_brca.py
-python TCGA-BRCA/scripts/download_tcia_official_radiogenomics.py
-python TCGA-BRCA/scripts/audit_healthcom26_reproduction.py
 python TCGA-BRCA/main.py --seed 42 --output-dir TCGA-BRCA/dump/nvflare_seed42
 ```
+
+The root README also documents the [selected development configuration and
+results](../README.md#selected-development-configuration). Its overrides do
+not change the defaults below; the reported three-seed scores were measured
+on Ray with a fixed partition, not by sweeping the NVFlare CLI seed.
 
 The real-data defaults are 4 clients, 3 tasks, 10 rounds per task, 20 local
 epochs per round, latent width 800, noise width 100, and replay enabled.
