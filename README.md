@@ -321,7 +321,7 @@ expected TCGA score.
 
 ### Recorded development benchmark
 
-The selected configuration was evaluated with the **Ray backend on `main`**
+The selected configuration was evaluated with the **Ray reference backend**
 at commit `fe97e2347fa2c6ebac408868cc11d3d18c1df296`. All three runs used the
 same frozen seed-42 data partition; only the training seed changed. Each
 completed 3 tasks × 10 rounds, followed by one final evaluation pass.
