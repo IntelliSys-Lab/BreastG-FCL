@@ -7,14 +7,6 @@ import numpy as np
 
 logger = logging.getLogger('GFedCL')
 
-class Identity(nn.Module):
-    """Simple identity module"""
-    def __init__(self):
-        super(Identity, self).__init__()
-    
-    def forward(self, x):
-        return x
-
 #-----------------------------
 # For GFedCL - Updated for TCGA-BRCA
 #-----------------------------
@@ -485,6 +477,3 @@ class BreastGraphGenerator(nn.Module):
         finally:
             for module, training in training_modes:
                 module.training = training
-
-def tensor_memory_in_MB(tensor):
-    return tensor.element_size() * tensor.nelement() / (1024 ** 2)

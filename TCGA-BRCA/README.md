@@ -234,11 +234,6 @@ metrics. `--verify-ray` additionally writes the reference run under
 the selected workspace, with console output in `simulator.log`. Export-only runs produce the job without training
 artifacts.
 
-Latent visualization uses actual E/G outputs and requires explicit task
-graphs. Image-based FID/inception evaluation remains disabled: G synthesizes
-latent features, not raw images, and requests for synthetic images fail
-explicitly instead of returning random input noise.
-
 Run the strict-reproduction audit with:
 
 ```bash

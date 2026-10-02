@@ -1,27 +1,15 @@
-import torch
-import numpy as np
-import random
-import os
-import logging
-import matplotlib.pyplot as plt
-import pandas as pd
-import seaborn as sns
-from collections import defaultdict
-import copy
 import csv
+import logging
+import os
+import random
+
+import numpy as np
+import torch
 
 from model.modules import BreastGraphGenerator
-# from utils.dp_ks_analysis import DifferentialPrivacyAnalyzer
-from utils.visualization_utils import *
-from utils.log_utils import *
-from utils.plot_utils import *
-from utils.evaluation_utils import *
-# from utils.communication_tracker import CommunicationTracker
-# from utils.quality_evaluator import QualityEvaluator
-
-# Import our Server and ModifiedClient classes
 from model.server import Server
-from model.client import ModifiedClient
+from utils.evaluation_utils import evaluate_all_tasks
+from utils.model_utils import create_clients as create_modified_clients
 
 logger = logging.getLogger('GFedCL')
 
@@ -76,8 +64,6 @@ def add_laplace_noise_to_graph(relational_graph, scale, normalize=True):
     
     return noisy_graph.astype(np.float32)
 
-from utils.model_utils import create_clients as create_modified_clients
-
 
 class ParallelServerGFedCL:
     def __init__(self, opt, transport=None, dataloaders=None):
@@ -126,20 +112,6 @@ class ParallelServerGFedCL:
         logger.info("Creating modified clients...")
         self.clients = create_modified_clients(opt)
         logger.info(f"Created {len(self.clients)} clients")
-        
-        # Initialize DP analyzer if differential privacy is enabled
-        # self.dp_analyzer = DifferentialPrivacyAnalyzer(
-        # epsilon=self.opt.epsilon,
-        # sensitivity=self.opt.sensitivity,
-        # output_dir=os.path.join(self.opt.output_dir, 'dp_analysis')
-        # )
-
-        # Initialize communication tracker
-        # self.comm_tracker = CommunicationTracker()
-        # logger.info("Initialized communication tracker")
-
-        # Initialize quality evaluator (FID/IS) if enabled
-        # self.quality_evaluator = QualityEvaluator(opt)
         
     @classmethod
     def from_components(cls, opt, server, graph_generator, clients, dataloaders, transport):
@@ -257,9 +229,6 @@ class ParallelServerGFedCL:
             for r in range(self.opt.num_rounds):
                 logger.info(f'Round {r+1}/{self.opt.num_rounds}')
                 self.transport.set_round(task, r)
-
-                # Start tracking this round
-                # self.comm_tracker.start_round(task, r)
                 
                 # PHASE 1: Collect encodings from all clients with current encoders (no training)
                 logger.info(f'Phase 1: Collecting encodings from all clients in parallel')
@@ -270,11 +239,6 @@ class ParallelServerGFedCL:
                 server_discriminator = self.server.get_discriminator()
                 for client in self.clients:
                     client.set_server_discriminator(server_discriminator)
-                    # self.comm_tracker.add_model_weights_communication(
-                    #     server_discriminator,
-                    #     direction='download',
-                    #     model_type='discriminator_weights'
-                    # )
                 
                 # Collect encodings from each client without training (batched)
                 encoding_results = []
@@ -300,12 +264,6 @@ class ParallelServerGFedCL:
                 for result in encoding_results:
                     all_encodings.extend(result['encodings'])
                     all_graph_embeddings.extend(result['graph_embeddings'])
-
-                # Track encodings uploaded to server
-                # self.comm_tracker.add_encodings_communication(
-                #     all_encodings,
-                #     all_graph_embeddings
-                # )
                 
                 # PHASE 2: Train the server's discriminator with collected encodings
                 logger.info(f'Phase 2: Training server discriminator with {len(all_encodings)} samples')
@@ -330,11 +288,6 @@ class ParallelServerGFedCL:
                 server_discriminator = self.server.get_discriminator()
                 for client in self.clients:
                     client.set_server_discriminator(server_discriminator)
-                    # self.comm_tracker.add_model_weights_communication(
-                    #     server_discriminator,
-                    #     direction='download',
-                    #     model_type='discriminator_weights'
-                    # )
                 
                 # Train clients with the updated discriminator in parallel (batched)
                 logger.info(f'Waiting for client training to complete...')
@@ -367,16 +320,6 @@ class ParallelServerGFedCL:
                     encoder_weights.append(result['encoder'])
                     predictor_weights.append(result['predictor'])
                     generator_weights.append(result['generator'])
-                    # self.comm_tracker.add_model_weights_communication(
-                    #     result['encoder'],
-                    #     direction='upload',
-                    #     model_type='encoder_weights'
-                    # )
-                    # self.comm_tracker.add_model_weights_communication(
-                    #     result['predictor'],
-                    #     direction='upload',
-                    #     model_type='predictor_weights'
-                    # )
                 
                 # Update server's learning rate
                 self.server.update_learning_rate()
@@ -395,19 +338,6 @@ class ParallelServerGFedCL:
                         'generator': global_generator,
                     })
                     client.set_training_state(result['training_state'])
-                    # self.comm_tracker.add_model_weights_communication(
-                    #     global_encoder,
-                    #     direction='download',
-                    #     model_type='encoder_weights'
-                    # )
-                    # self.comm_tracker.add_model_weights_communication(
-                    #     global_predictor,
-                    #     direction='download',
-                    #     model_type='predictor_weights'
-                    # )
-
-                # End round tracking
-                # self.comm_tracker.end_round()
                 
                 # Evaluate current performance for all clients on this task in parallel
                 logger.info(f'Evaluating clients for task {task+1} in parallel...')
@@ -482,11 +412,6 @@ class ParallelServerGFedCL:
                 # Add this round's data to our tracking
                 all_tasks_accuracy.append(round_all_tasks_data)
 
-                # Optional FID/IS evaluations after each round
-                # self.quality_evaluator.evaluate_round(
-                #     task, r, self.clients, self.dataloaders, relational_graphs
-                # )
-
         # Save round accuracy to CSV
         csv_path = os.path.join(self.opt.output_dir, 'round_accuracy.csv')
         with open(csv_path, 'w', newline='') as csvfile:
@@ -527,120 +452,12 @@ class ParallelServerGFedCL:
         
         logger.info(f"Saved all tasks accuracy data to {all_tasks_csv_path}")
 
-        # Save communication overhead data
-        # comm_csv_path = os.path.join(self.opt.output_dir, 'communication_overhead.csv')
-        # self.comm_tracker.save_to_csv(comm_csv_path)
-        # logger.info(f"Saved communication overhead data to {comm_csv_path}")
-        
-        # Plot communication overhead
-        # comm_plots_dir = os.path.join(self.opt.output_dir, 'communication_plots')
-        # self.comm_tracker.plot_communication_overhead(comm_plots_dir)
-        # logger.info(f"Saved communication overhead plots to {comm_plots_dir}")
-        
-        # comm_summary = self.comm_tracker.get_summary()
-        # logger.info("===== COMMUNICATION SUMMARY =====")
-        # for key, value in comm_summary.items():
-        #     logger.info(f"{key}: {value}")
-        # logger.info("===============================")
-        
         # Test accuracy after training all tasks
         logger.info("Evaluating final model accuracy...")
         all_tasks_acc = evaluate_all_tasks(
             self.opt, self.clients, self.dataloaders, relational_graphs
         )
         
-        # quality_summary = self.quality_evaluator.finalize()
         quality_summary = {}
 
         return all_tasks_acc, all_tasks_accuracy, quality_summary
-    
-    def visualize_attention_components(self, task, spatial_attention, temporal_patterns, combined_attention):
-        """
-        Visualize the components of the attention mechanism
-        
-        Args:
-            task: Current task ID
-            spatial_attention: Spatial attention matrix
-            temporal_patterns: Temporal pattern similarity matrix (can be None)
-            combined_attention: Combined attention matrix
-        """
-        import matplotlib.pyplot as plt
-        import seaborn as sns
-        import os
-        
-        # Create output directory if it doesn't exist
-        vis_dir = os.path.join(self.opt.output_dir, 'attention_visualizations')
-        os.makedirs(vis_dir, exist_ok=True)
-        
-        # Create figure
-        if temporal_patterns is not None:
-            fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-            
-            # Plot spatial attention
-            sns.heatmap(spatial_attention, ax=axes[0], cmap='viridis', annot=False)
-            axes[0].set_title(f'Task {task+1}: Spatial Attention')
-            
-            # Plot temporal patterns
-            sns.heatmap(temporal_patterns, ax=axes[1], cmap='viridis', annot=False)
-            axes[1].set_title(f'Task {task+1}: Temporal Patterns')
-            
-            # Plot combined attention
-            sns.heatmap(combined_attention, ax=axes[2], cmap='viridis', annot=False)
-            axes[2].set_title(f'Task {task+1}: Combined Attention')
-        else:
-            fig, axes = plt.subplots(1, 2, figsize=(12, 6))
-            
-            # Plot spatial attention
-            sns.heatmap(spatial_attention, ax=axes[0], cmap='viridis', annot=False)
-            axes[0].set_title(f'Task {task+1}: Spatial Attention')
-            
-            # Plot combined attention (same as spatial in this case)
-            sns.heatmap(combined_attention, ax=axes[1], cmap='viridis', annot=False)
-            axes[1].set_title(f'Task {task+1}: Combined Attention')
-        
-        plt.tight_layout()
-        plt.savefig(os.path.join(vis_dir, f'attention_components_task{task+1}.png'), dpi=300)
-        plt.close()
-        
-        logger.info(f"Task {task+1}: Saved attention component visualization")
-    
-    def visualize_dp_comparison(self, original_graphs, noisy_graphs):
-        """
-        Create a visualization comparing original and noisy relational graphs
-        
-        Args:
-            original_graphs: List of original relational graphs
-            noisy_graphs: List of relational graphs with Laplace noise
-        """
-        import matplotlib.pyplot as plt
-        import seaborn as sns
-        
-        vis_dir = os.path.join(self.opt.output_dir, 'dp_comparison')
-        os.makedirs(vis_dir, exist_ok=True)
-        
-        for task in range(self.opt.num_task):
-            if original_graphs[task] is None:
-                continue
-                
-            fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-            
-            # Original graph
-            sns.heatmap(original_graphs[task], ax=axes[0], cmap='viridis', 
-                       vmin=0, vmax=1, annot=False)
-            axes[0].set_title(f'Task {task+1}: Original Graph')
-            
-            # Noisy graph
-            sns.heatmap(noisy_graphs[task], ax=axes[1], cmap='viridis', 
-                       vmin=0, vmax=1, annot=False)
-            axes[1].set_title(f'Task {task+1}: Graph with Laplace Noise (ε={self.opt.epsilon})')
-            
-            # Difference
-            diff = np.abs(original_graphs[task] - noisy_graphs[task])
-            sns.heatmap(diff, ax=axes[2], cmap='Reds', annot=False)
-            axes[2].set_title(f'Task {task+1}: Absolute Difference')
-            
-            plt.tight_layout()
-            plt.savefig(os.path.join(vis_dir, f'dp_comparison_task{task+1}.png'), dpi=300)
-            plt.close()
-            
-        logger.info(f"Saved DP comparison visualizations to {vis_dir}")

@@ -115,9 +115,6 @@ def build_parser():
     parser.add_argument("--num-rounds", type=int, default=10)
     parser.add_argument("--num-clients", type=int, default=4)
 
-    parser.add_argument("--use-visdom", type=_str2bool, default=False)
-    parser.add_argument("--outf", default=DEFAULT_LOAD_DIR)
-
     parser.add_argument(
         "--nt", type=int, default=None,
         help="Compatibility option; graph embedding dimension is set by --num-clients.",
@@ -136,12 +133,6 @@ def build_parser():
 
     parser.add_argument("--sensitivity", type=float, default=1.0)
     parser.add_argument("--epsilon", type=float, default=1.0)
-
-    parser.add_argument("--eval-fid", type=_str2bool, default=False)
-    parser.add_argument("--eval-is", type=_str2bool, default=False)
-    parser.add_argument("--fid-num-clients", type=int, default=0)
-    parser.add_argument("--fid-max-batches", type=int, default=0)
-    parser.add_argument("--inception-samples-per-client", type=int, default=0)
 
     parser.add_argument("--ray-num-gpus-per-task", type=float, default=None)
     parser.add_argument("--ray-num-cpus-per-task", type=float, default=1.0)

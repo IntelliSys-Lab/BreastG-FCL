@@ -410,7 +410,7 @@ The locally verified environment used:
 | --- | --- |
 | Python | 3.10.12 |
 | NVFlare | 2.7.1 |
-| PyTorch / torchvision | 2.2.1+cu118 / 0.17.1+cu118 |
+| PyTorch | 2.2.1+cu118 |
 | Ray | 2.55.1 |
 | NumPy | 1.26.4 |
 

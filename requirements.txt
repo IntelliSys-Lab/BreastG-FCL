@@ -1,8 +1,7 @@
 # Core ML stack
-# For CUDA-specific PyTorch wheels, install torch/torchvision from the
+# For CUDA-specific PyTorch wheels, install torch from the
 # matching PyTorch index first, then install the remaining packages here.
 torch>=2.0
-torchvision>=0.15
 
 # Federated execution (NVFlare is the default; Ray is the parity reference)
 nvflare==2.7.1
@@ -15,9 +14,7 @@ matplotlib>=3.7
 seaborn>=0.12
 
 # Dataset and utility dependencies
-Pillow>=9.0
 requests>=2.28
-networkx>=2.8
 easydict>=1.10
 
 # TCIA official radiogenomics workbooks

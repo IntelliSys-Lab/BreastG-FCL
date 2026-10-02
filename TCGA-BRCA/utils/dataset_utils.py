@@ -577,14 +577,3 @@ def setup_tcga_brca_loaders(opt):
         print(f"  - DCE kinetic temporal feature dim: {opt.client_temporal_features[0].shape[1]}")
 
     return client_loaders
-
-
-def read_pickle(name):
-    with open(name, "rb") as f:
-        data = pickle.load(f)
-    return data
-
-
-def write_pickle(data, name):
-    with open(name, "wb") as f:
-        pickle.dump(data, f)

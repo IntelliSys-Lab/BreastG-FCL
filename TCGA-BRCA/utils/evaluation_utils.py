@@ -1,7 +1,4 @@
-import matplotlib.pyplot as plt
-import os
 import logging as logger
-import numpy as np
 
 def evaluate_all_tasks(opt, clients, dataloaders, relational_graphs):
         """

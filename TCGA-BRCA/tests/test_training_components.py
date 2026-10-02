@@ -22,7 +22,7 @@ from model.server import Server
 
 def make_opt(**overrides):
     options = dict(
-        device="cpu", batch_size=4, use_visdom=False, use_g_encode=True,
+        device="cpu", batch_size=4, use_g_encode=True,
         input_dim=8, nh=16, ni=16, nt=4, nd_out=4, num_clients=4,
         num_classes=2, noise_dim=5, no_bn=False, p=0.0,
         lr_e=0.001, lr_f=0.002, lr_g=0.003, lr_d=0.004,
